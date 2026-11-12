@@ -1,0 +1,14 @@
+# Vector Brain — never commit secrets, environments, or large local artefacts
+.env
+backend/.env
+backend/.venv/
+backend/.docling-models/
+backend/__pycache__/
+backend/app/__pycache__/
+frontend/node_modules/
+frontend/dist/
+storage/uploads/
+*.pyc
+.pytest_cache/
+
+backend/server.log

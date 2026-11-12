@@ -1,0 +1,21 @@
+:root, [data-theme="light"] {
+  --bg: #F6F7F9; --sidebar-bg: #FFFFFF; --surface: #FFFFFF; --surface-2: #EEF1F4;
+  --text: #182230; --text-secondary: #687386; --border: #E4E8EE;
+  --accent: #236B65; --accent-hover: #1B554F; --accent-soft: #E3F0EE;
+  --accent-2: #D3A65A; --success: #26845B; --error: #C74747; --warning: #B7791F;
+  --shadow: 0 1px 3px rgba(24,34,48,.08); --radius: 10px;
+}
+[data-theme="dark"] {
+  --bg: #101722; --sidebar-bg: #131D2A; --surface: #192536; --surface-2: #202E40;
+  --text: #EDF2F7; --text-secondary: #A2AFBF; --border: #2B3A4D;
+  --accent: #66B5A8; --accent-hover: #7CC4B8; --accent-soft: #1D3330;
+  --accent-2: #E0B96F; --success: #54B58A; --error: #E47C7C; --warning: #E0B96F;
+  --shadow: 0 1px 3px rgba(0,0,0,.35);
+}
+* { box-sizing: border-box; }
+html, body, #app { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 15px; line-height: 1.55; }
+a { color: var(--accent); }
+button { font: inherit; cursor: pointer; }
+input, textarea, select { font: inherit; color: var(--text); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

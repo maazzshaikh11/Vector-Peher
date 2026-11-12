@@ -1,0 +1,32 @@
+# CPU-only PyTorch wheel index (avoids the ~800MB CUDA wheel).
+--extra-index-url https://download.pytorch.org/whl/cpu
+# Pinned to the exact set verified on 2026-11-11 (Python 3.12, Ubuntu 24.04).
+# Known constraints: docling 2.15.0 needs docling-core 2.40.0 (2.84+/2.106
+# moved BoundingBox out of docling_core.types.legacy_doc.base);
+# torchvision must be the +cpu build matching torch 2.15.0+cpu;
+# codecarbon is required by transformers 4.57.6's model-card import.
+fastapi==0.162.4
+uvicorn[standard]==0.54.0
+sqlalchemy==2.1.8
+alembic==1.20.1
+psycopg[binary]==3.3.8
+pydantic==2.14.3
+pydantic-settings==2.16.2
+python-multipart==0.0.33
+httpx==0.28.1
+numpy==2.5.4
+pgvector==0.5.1
+groq==1.7.0
+docling==2.15.0
+docling-core==2.40.0
+docling-ibm-models==3.15.0
+typer==0.12.5
+torchvision==0.29.2
+codecarbon==3.3.2
+pypdf==7.0.1
+sentence-transformers==3.3.1
+transformers==4.57.6
+torch==2.15.0
+pytest==9.2.0
+pytest-asyncio==1.4.1.post1
+reportlab==5.1.0

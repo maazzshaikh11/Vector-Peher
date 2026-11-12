@@ -1,0 +1,17 @@
+@import './variables.css';
+.btn { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 8px; padding: 8px 14px; }
+.btn:hover { border-color: var(--accent); }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-danger { color: var(--error); border-color: var(--border); }
+.btn-danger:hover { border-color: var(--error); }
+.btn-sm { padding: 5px 10px; font-size: 13px; }
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+.input { width: 100%; border: 1px solid var(--border); background: var(--surface); border-radius: 8px; padding: 8px 10px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+.muted { color: var(--text-secondary); }
+.badge { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--text-secondary); }
+.badge-success { background: color-mix(in srgb, var(--success) 15%, transparent); color: var(--success); }
+.badge-error { background: color-mix(in srgb, var(--error) 12%, transparent); color: var(--error); }
+.badge-processing { background: color-mix(in srgb, var(--accent-2) 18%, transparent); color: var(--warning); }
+@media (max-width: 900px) { .doc-panel { display: none !important; } .doc-panel.open-mobile { display: flex !important; position: fixed; right: 0; top: 0; bottom: 0; z-index: 40; box-shadow: var(--shadow); } }
