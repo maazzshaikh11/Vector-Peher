@@ -2,6 +2,7 @@
 import hashlib
 import io
 import time
+import uuid
 
 from tests.conftest import make_sample_pdf
 
@@ -128,3 +129,77 @@ def test_delete_cascades(client, db, sample_pdf_bytes):
     ).scalar()
     assert n_emb_doc == 0
     assert n_emb >= 0
+
+
+def test_rename_document(client, sample_pdf_bytes):
+    r = _upload(client, sample_pdf_bytes)
+    doc_id = r.json()["documents"][0]["id"]
+    _wait_ready(client, doc_id)
+
+    r = client.patch(f"/api/documents/{doc_id}", json={"filename": "renamed.pdf"})
+    assert r.status_code == 200
+    assert r.json()["original_filename"] == "renamed.pdf"
+    # The stored file keeps its UUID name; only the display name changes.
+    assert r.json()["filename"].endswith(".pdf")
+    assert r.json()["filename"] != "renamed.pdf"
+
+    r = client.get(f"/api/documents/{doc_id}")
+    assert r.status_code == 200
+    assert r.json()["original_filename"] == "renamed.pdf"
+    # Chunk metadata (source panel) cites the new name too.
+    r = client.get(f"/api/search/documents/{doc_id}")
+    assert r.status_code == 200
+    assert r.json()[0]["metadata"]["original_filename"] == "renamed.pdf"
+
+
+def test_rename_document_validation(client, sample_pdf_bytes):
+    r = _upload(client, sample_pdf_bytes)
+    doc_id = r.json()["documents"][0]["id"]
+    r = client.patch(f"/api/documents/{doc_id}", json={"filename": "   "})
+    assert r.status_code == 400
+    r = client.patch(f"/api/documents/{doc_id}", json={})
+    assert r.status_code == 400
+    r = client.patch(
+        "/api/documents/00000000-0000-0000-0000-000000000000",
+        json={"filename": "x.pdf"},
+    )
+    assert r.status_code == 404
+
+
+def test_reprocess_failed_document(client, db, sample_pdf_bytes):
+    from app.models.models import Document, DocumentStatus
+
+    r = _upload(client, sample_pdf_bytes)
+    doc_id = r.json()["documents"][0]["id"]
+    _wait_ready(client, doc_id)
+    before_chunks = client.get(f"/api/documents/{doc_id}").json()["chunk_count"]
+    assert before_chunks >= 3
+
+    # Simulate a failed document (same file still on disk).
+    doc = db.get(Document, uuid.UUID(doc_id))
+    doc.status = DocumentStatus.FAILED
+    doc.error_message = "simulated failure"
+    db.commit()
+
+    r = client.post(f"/api/documents/{doc_id}/reprocess")
+    assert r.status_code == 200
+    assert r.json()["status"] == "UPLOADED"
+    assert r.json()["error_message"] is None
+    status = _wait_ready(client, doc_id)
+    assert status["chunk_count"] == before_chunks, "reprocess must not duplicate chunks"
+    assert status["page_count"] == 3
+
+
+def test_reprocess_rejects_unknown_and_in_progress(client, db, sample_pdf_bytes):
+    from app.models.models import Document, DocumentStatus
+
+    r = client.post("/api/documents/00000000-0000-0000-0000-000000000000/reprocess")
+    assert r.status_code == 404
+
+    r = _upload(client, sample_pdf_bytes)
+    doc_id = r.json()["documents"][0]["id"]
+    doc = db.get(Document, uuid.UUID(doc_id))
+    doc.status = DocumentStatus.PROCESSING
+    db.commit()
+    r = client.post(f"/api/documents/{doc_id}/reprocess")
+    assert r.status_code == 409

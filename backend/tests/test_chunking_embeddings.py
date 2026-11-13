@@ -67,3 +67,44 @@ def test_embedding_same_words_similar():
     sim_same = float(q @ same)
     sim_other = float(q @ other)
     assert sim_same > sim_other
+
+
+def test_concurrent_first_load_waits_for_model(monkeypatch):
+    """Startup race (Fix 2 follow-up): two callers arriving during the slow
+    first model load must both get the model — not a hash-fallback None.
+    Uses a slow fake constructor so the test runs in ~1s; restores the real
+    cached model afterwards so later tests are unaffected."""
+    import threading
+    import time
+
+    import app.services.embeddings.embeddings as emb
+
+    saved_model, saved_tried = emb._model, emb._model_tried
+    built = []
+
+    class SlowFake:
+        def __init__(self, *args, **kwargs):
+            time.sleep(0.5)
+            built.append(1)
+
+        def encode(self, texts, normalize_embeddings=True):
+            return np.zeros((len(texts), 384), dtype=np.float32)
+
+    monkeypatch.setattr("sentence_transformers.SentenceTransformer", SlowFake)
+    emb._model, emb._model_tried = None, False
+    try:
+        results = []
+        threads = [
+            threading.Thread(target=lambda: results.append(emb._load_model()))
+            for _ in range(4)
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=10)
+        assert len(built) == 1, "model must be constructed exactly once"
+        assert all(r is not None for r in results)
+        assert len({id(r) for r in results}) == 1, "all callers share one model"
+        assert emb.embedding_mode() == "sentence-transformers"
+    finally:
+        emb._model, emb._model_tried = saved_model, saved_tried

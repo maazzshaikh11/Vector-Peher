@@ -11,12 +11,19 @@ embeddings.
 """
 import hashlib
 import re
+import threading
 
 import numpy as np
 
 DIM = 384
 _model = None
 _model_tried = False
+# Guards the (slow, ~18s) first model load: without it, a second caller
+# arriving mid-load would see _model_tried=True with _model still None and
+# wrongly report hash-fallback — and a chat arriving in that window would
+# embed (and cache) with hash vectors. With the lock, concurrent callers
+# wait for the load to finish and then get the real model.
+_model_lock = threading.Lock()
 
 
 def _hash_embed(text: str) -> np.ndarray:
@@ -31,19 +38,24 @@ def _hash_embed(text: str) -> np.ndarray:
 
 
 def _load_model():
+    # Always take the lock: a fast path that reads _model_tried outside it
+    # can observe the intermediate state (_model_tried=True, _model still
+    # None) mid-load and wrongly report hash-fallback. The lock is
+    # uncontended after the first load, so this costs nothing then.
     global _model, _model_tried
-    if _model_tried:
+    with _model_lock:
+        if _model_tried:
+            return _model
+        _model_tried = True
+        try:
+            from sentence_transformers import SentenceTransformer
+
+            from app.core.config import get_settings
+
+            _model = SentenceTransformer(get_settings().embedding_model)
+        except Exception:
+            _model = None
         return _model
-    _model_tried = True
-    try:
-        from sentence_transformers import SentenceTransformer
-
-        from app.core.config import get_settings
-
-        _model = SentenceTransformer(get_settings().embedding_model)
-    except Exception:
-        _model = None
-    return _model
 
 
 def embedding_mode() -> str:

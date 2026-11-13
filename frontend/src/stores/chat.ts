@@ -53,6 +53,7 @@ export const useChatStore = defineStore('chat', () => {
     const q = question.trim()
     if (!q || streaming.value) return
     const docs = useDocumentsStore()
+    if (docs.scopedSourceCount === 0) { toast.push('Select at least one ready source before asking a question.', 'error'); return }
     if (!currentSessionId.value) { const s = await newChat(); if (!s) return }
     const userMsg: ChatMessageItem = { id: `u-${Date.now()}`, role: 'user', content: q, created_at: new Date().toISOString() }
     const aiMsg: ChatMessageItem = { id: `a-${Date.now()}`, role: 'assistant', content: '', sources: [], created_at: new Date().toISOString() }
@@ -61,6 +62,7 @@ export const useChatStore = defineStore('chat', () => {
     await streamChat(q, { sessionId: currentSessionId.value ?? undefined, documentIds: docs.selectedDocumentIds, topK: 5 }, {
       onToken: (text) => { messages.value[aiIndex] = { ...messages.value[aiIndex], content: messages.value[aiIndex].content + text } },
       onSources: (sources) => { messages.value[aiIndex] = { ...messages.value[aiIndex], sources } },
+      onCached: () => { messages.value[aiIndex] = { ...messages.value[aiIndex], cached: true } },
       onDone: (sid) => { if (sid && !currentSessionId.value) currentSessionId.value = sid },
       onError: (msg) => {
         messages.value[aiIndex] = { ...messages.value[aiIndex], content: messages.value[aiIndex].content || `Sorry — I could not get an answer: ${msg}` }

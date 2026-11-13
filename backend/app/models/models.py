@@ -99,6 +99,28 @@ class DocumentEmbedding(Base):
     chunk: Mapped["DocumentChunk"] = relationship("DocumentChunk", back_populates="embedding")
 
 
+class QueryCache(Base):
+    """Semantic cache: one row per answered question + document scope.
+
+    scope is the canonical document selection: "all" when the chat covered
+    all documents, else the comma-joined sorted UUID strings of the
+    selected documents. Lookup matches on same scope + cosine similarity
+    of question_embedding >= cache_similarity_threshold.
+    """
+
+    __tablename__ = "query_cache"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    scope: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    question_embedding: Mapped[list] = mapped_column(Vector(384), nullable=False)
+    answer: Mapped[str] = mapped_column(Text, nullable=False)
+    sources: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class ChatSession(Base):
     __tablename__ = "chat_sessions"
 

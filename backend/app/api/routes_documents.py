@@ -4,16 +4,19 @@ import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.database.session import get_db
 from app.models.models import Document, DocumentChunk, DocumentStatus
 from app.schemas.schemas import (
+    DocumentRenameRequest,
     DocumentStatusResponse,
     DocumentSummary,
     DocumentUploadResponse,
 )
+from app.services.cache import invalidate_document
 from app.services.processing import process_document
 
 router = APIRouter()
@@ -139,12 +142,81 @@ def get_document_status(doc_id: uuid.UUID, db: Session = Depends(get_db)):
     )
 
 
+@router.patch("/documents/{doc_id}", response_model=DocumentSummary)
+def rename_document(doc_id: uuid.UUID, body: DocumentRenameRequest, db: Session = Depends(get_db)):
+    """Rename a document's display name (original_filename). The stored
+    file on disk keeps its UUID name — only the display name changes.
+    Cached answers and chunk metadata citing the old name are invalidated/
+    updated so citations stay consistent."""
+    doc = db.get(Document, doc_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    new_name = (body.original_filename or body.filename or "").strip()
+    if not new_name:
+        raise HTTPException(status_code=400, detail="A non-empty filename is required.")
+    if len(new_name) > 255:
+        raise HTTPException(status_code=400, detail="Filename must be at most 255 characters.")
+    doc.original_filename = new_name
+    db.execute(
+        text(
+            "UPDATE document_chunks SET metadata = jsonb_set("
+            "COALESCE(metadata, '{}'::jsonb), '{original_filename}', to_jsonb(CAST(:name AS text))) "
+            "WHERE document_id = :d"
+        ),
+        {"name": new_name, "d": str(doc_id)},
+    )
+    db.commit()
+    db.refresh(doc)
+    # Cached answers may cite the old display name — drop them.
+    invalidate_document(db, doc_id)
+    db.commit()
+    return _summary(db, doc)
+
+
+@router.post("/documents/{doc_id}/reprocess", response_model=DocumentSummary)
+def reprocess_document(
+    doc_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Reset a document to UPLOADED and re-run the processing pipeline.
+    Intended for FAILED documents, but any non-processing document can be
+    reprocessed (e.g. after an extractor fix). Existing chunks are deleted
+    first so reprocessing never duplicates them; cached answers for the
+    document are invalidated. A document already PROCESSING/INDEXING is
+    rejected with 409 to avoid concurrent double-processing."""
+    doc = db.get(Document, doc_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    if doc.status in (DocumentStatus.PROCESSING, DocumentStatus.INDEXING):
+        raise HTTPException(
+            status_code=409, detail="Document is already being processed."
+        )
+    # Bulk delete: the DB-level FK (ondelete=CASCADE) removes embeddings.
+    db.query(DocumentChunk).filter(DocumentChunk.document_id == doc_id).delete(
+        synchronize_session=False
+    )
+    doc.status = DocumentStatus.UPLOADED
+    doc.error_message = None
+    doc.page_count = None
+    doc.processing_seconds = None
+    db.commit()
+    db.refresh(doc)
+    invalidate_document(db, doc_id)
+    db.commit()
+    background_tasks.add_task(process_document, doc.id)
+    return _summary(db, doc)
+
+
 @router.delete("/documents/{doc_id}")
 def delete_document(doc_id: uuid.UUID, db: Session = Depends(get_db)):
     doc = db.get(Document, doc_id)
     if doc is None:
         raise HTTPException(status_code=404, detail="Document not found.")
     file_path = Path(doc.file_path)
+    # Invalidate every cached answer whose scope references this document
+    # ("all" scopes too — they may cite it).
+    invalidate_document(db, doc_id)
     db.delete(doc)
     db.commit()
     try:

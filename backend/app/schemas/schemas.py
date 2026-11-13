@@ -37,6 +37,15 @@ class DocumentStatusResponse(BaseModel):
     error_message: str | None = None
 
 
+class DocumentRenameRequest(BaseModel):
+    """Rename a document's display name. The frontend sends {filename};
+    original_filename is accepted as an alias. The stored file on disk
+    (UUID name) is never renamed — only the display name changes."""
+
+    filename: str | None = None
+    original_filename: str | None = None
+
+
 class ChunkOut(BaseModel):
     id: uuid.UUID
     chunk_index: int

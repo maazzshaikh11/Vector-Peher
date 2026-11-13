@@ -38,6 +38,22 @@ export async function getDocumentStatus(id: string): Promise<{ id: string; statu
   return handle(await fetch(`${API_BASE_URL}/api/documents/${encodeURIComponent(id)}/status`))
 }
 
+/** Rename a document's display name. Requires a backend PATCH
+ *  /api/documents/{id} endpoint — if the server does not implement it yet,
+ *  this throws and the caller surfaces the failure (no silent rename). */
+export async function renameDocument(id: string, filename: string): Promise<DocumentItem> {
+  return handle(await fetch(`${API_BASE_URL}/api/documents/${encodeURIComponent(id)}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename }),
+  }))
+}
+
+/** Ask the backend to reprocess a FAILED document. Requires a backend POST
+ *  /api/documents/{id}/reprocess endpoint — see renameDocument note. */
+export async function reprocessDocument(id: string): Promise<DocumentItem> {
+  return handle(await fetch(`${API_BASE_URL}/api/documents/${encodeURIComponent(id)}/reprocess`, { method: 'POST' }))
+}
+
 export async function deleteDocument(id: string): Promise<void> {
   const res = await fetch(`${API_BASE_URL}/api/documents/${encodeURIComponent(id)}`, { method: 'DELETE' })
   if (!res.ok) throw new Error(`Delete failed (${res.status})`)
@@ -70,7 +86,7 @@ export async function searchDocuments(query: string, documentIds?: string[] | nu
 
 export function chatStreamUrl(): string { return `${API_BASE_URL}/api/chat` }
 
-export function parseSseLine(line: string): { type: string; text?: string; sources?: unknown; session_id?: string; message?: string } | null {
+export function parseSseLine(line: string): { type: string; text?: string; sources?: unknown; session_id?: string; message?: string; cached?: boolean } | null {
   const trimmed = line.trim()
   if (!trimmed.startsWith('data:')) return null
   const payload = trimmed.slice(5).trim()

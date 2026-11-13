@@ -5,6 +5,8 @@ import type { Source } from '../types'
 export interface StreamCallbacks {
   onToken?: (text: string) => void
   onSources?: (sources: Source[]) => void
+  /** Fired when the server reports the answer came from its response cache. */
+  onCached?: () => void
   onDone?: (sessionId?: string) => void
   onError?: (message: string) => void
 }
@@ -40,6 +42,7 @@ export function useStreaming() {
           if (!ev) continue
           if (ev.type === 'token' && ev.text) cb.onToken?.(ev.text)
           else if (ev.type === 'sources' && Array.isArray(ev.sources)) cb.onSources?.(ev.sources as Source[])
+          else if (ev.type === 'cached') cb.onCached?.()
           else if (ev.type === 'done') { doneCalled = true; cb.onDone?.(ev.session_id as string | undefined) }
           else if (ev.type === 'error') cb.onError?.(ev.message || 'Streaming error')
         }

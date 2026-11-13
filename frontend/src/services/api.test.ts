@@ -5,6 +5,7 @@ import { validatePdfFile, formatFileSize } from '../types'
 describe('parseSseLine', () => {
   it('parses token JSON', () => { expect(parseSseLine('data: {"type":"token","text":"hello"}')).toEqual({ type: 'token', text: 'hello' }) })
   it('parses sources JSON', () => { const e = parseSseLine('data: {"type":"sources","sources":[]}'); expect(e?.type).toBe('sources') })
+  it('parses cached JSON', () => { const e = parseSseLine('data: {"type":"cached","cached":true}'); expect(e?.type).toBe('cached'); expect(e?.cached).toBe(true) })
   it('treats plain text as token', () => { expect(parseSseLine('data: hello world')).toEqual({ type: 'token', text: 'hello world' }) })
   it('treats [DONE] as done', () => { expect(parseSseLine('data: [DONE]')?.type).toBe('done') })
   it('ignores non-data lines', () => { expect(parseSseLine(': keep-alive')).toBeNull() })

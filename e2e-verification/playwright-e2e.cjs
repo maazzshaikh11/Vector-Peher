@@ -39,6 +39,18 @@ function check(name, ok, detail = '') {
     await page.waitForSelector('.doc-card:has-text("quokka-propulsion-e2e.pdf") >> text=Ready', { timeout: 120000 });
     check('doc reaches READY in UI', true);
 
+    // 2b. NotebookLM-style three-panel layout
+    check('Sources panel visible', await page.locator('.panel-sources', { hasText: 'Sources' }).isVisible());
+    check('Chat panel visible', await page.locator('.chat', { hasText: 'Chat' }).isVisible());
+    check('Details panel visible', await page.locator('.details-panel', { hasText: 'Details' }).isVisible());
+    check('Details panel shows chat history', await page.locator('.details-panel', { hasText: 'Chat history' }).isVisible());
+    const sourcesIndicator = page.locator('.source-count');
+    await sourcesIndicator.waitFor({ timeout: 10000 });
+    check('composer shows live N sources indicator', (await sourcesIndicator.innerText()).includes('1 source'), await sourcesIndicator.innerText());
+    const chip = page.locator('.guide-chip').first();
+    await chip.waitFor({ timeout: 30000 });
+    check('suggested-question chip appears after READY', (await chip.innerText()).length > 0, await chip.innerText());
+
     // 3. Select doc for chat, ask Q1
     await page.check('input[aria-label="Select quokka-propulsion-e2e.pdf for chat"]');
     const composer = page.locator('textarea[aria-label="Ask a question about your documents"]');
@@ -82,7 +94,8 @@ function check(name, ok, detail = '') {
     await page.waitForFunction(() => document.documentElement.getAttribute('data-theme') === 'light', { timeout: 5000 });
     check('restored light theme', true);
 
-    // 7. Delete doc via UI + confirm dialog
+    // 7. Delete doc via UI + confirm dialog (row actions reveal on hover)
+    await card.hover();
     await page.click(`button[aria-label="Delete ${DOC}"]`);
     await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
     await page.click('[role="dialog"] button:has-text("Delete")');

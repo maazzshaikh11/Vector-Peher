@@ -39,4 +39,13 @@ describe('useStreaming', () => {
     await streamChat('hi', {}, { onError: (m) => { err = m } })
     expect(err).toMatch(/500/)
   })
+  it('fires onCached for the cached event', async () => {
+    const body = 'data: {"type":"sources","sources":[]}\ndata: {"type":"cached","cached":true}\ndata: {"type":"token","text":"cached answer"}\ndata: {"type":"done"}\n'
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(sseResponse(body)))
+    const { streamChat } = useStreaming()
+    let cached = false; const tokens: string[] = []
+    await streamChat('hi', {}, { onToken: (t) => tokens.push(t), onCached: () => { cached = true } })
+    expect(cached).toBe(true)
+    expect(tokens.join('')).toBe('cached answer')
+  })
 })

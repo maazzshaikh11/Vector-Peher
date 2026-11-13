@@ -14,4 +14,5 @@
 .badge-success { background: color-mix(in srgb, var(--success) 15%, transparent); color: var(--success); }
 .badge-error { background: color-mix(in srgb, var(--error) 12%, transparent); color: var(--error); }
 .badge-processing { background: color-mix(in srgb, var(--accent-2) 18%, transparent); color: var(--warning); }
-@media (max-width: 900px) { .doc-panel { display: none !important; } .doc-panel.open-mobile { display: flex !important; position: fixed; right: 0; top: 0; bottom: 0; z-index: 40; box-shadow: var(--shadow); } }
+/* Panels are laid out in views/WorkspaceView.vue; on small screens the
+   side panels become switchable overlays via the mobile tab bar there. */

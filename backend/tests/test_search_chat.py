@@ -60,6 +60,10 @@ def _sse_events(response):
 
 def test_chat_no_groq_key_returns_error_event(client, db):
     insert_ready_document(db)
+    # Sessions that exist before this chat (other tests may have left some
+    # behind) must be untouched: the property under test is that THIS failed
+    # chat adds no session, not that the whole table is empty.
+    before = client.get("/api/chat/sessions").json()
     r = client.post("/api/chat", json={"question": "What is quantum computing?"})
     assert r.status_code == 200
     assert "text/event-stream" in r.headers["content-type"]
@@ -75,7 +79,7 @@ def test_chat_no_groq_key_returns_error_event(client, db):
     # The auto-created session is removed again: failed chats leave no
     # empty sessions behind.
     r = client.get("/api/chat/sessions")
-    assert r.json() == []
+    assert r.json() == before
 
 
 def test_chat_mocked_groq_streams_tokens_sources_done_and_persists(client, db, monkeypatch):

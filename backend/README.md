@@ -71,6 +71,7 @@ cd backend && .venv/bin/alembic upgrade head
 | `TOP_K` | `5` | |
 | `CHUNK_SIZE` / `CHUNK_OVERLAP` | `1000` / `200` | chars |
 | `SIMILARITY_THRESHOLD` | `0.2` | cosine similarity floor for retrieval |
+| `CACHE_SIMILARITY_THRESHOLD` | `0.85` | cosine similarity floor for serving a cached answer (same document scope) |
 
 ## Endpoints
 
@@ -81,6 +82,8 @@ cd backend && .venv/bin/alembic upgrade head
 | `POST /api/documents/upload` | multipart `files` (multiple PDFs); duplicates by SHA-256 return `duplicate: true` with HTTP 200 and are not re-indexed |
 | `GET /api/documents`, `GET /api/documents/{id}`, `GET /api/documents/{id}/status` | |
 | `DELETE /api/documents/{id}` | deletes file + chunks + embeddings (cascade) |
+| `PATCH /api/documents/{id}` | rename display name (`{filename}` or `{original_filename}`); stored file keeps its UUID name |
+| `POST /api/documents/{id}/reprocess` | reset to UPLOADED and re-run processing (409 if already processing) |
 | `POST /api/chat` | SSE `text/event-stream`: `sources` (emitted first, right after retrieval — visible even if the LLM is down) → `token`* → `done`; `error` event if Groq is unconfigured. A session auto-created for a chat that fails before any message is persisted is removed again. |
 | `GET/POST /api/chat/sessions`, `GET/PATCH/DELETE /api/chat/sessions/{id}` | |
 | `POST /api/search` | `{query, document_ids?, top_k?}` → cited chunks with scores |

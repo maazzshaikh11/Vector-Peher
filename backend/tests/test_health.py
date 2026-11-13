@@ -27,11 +27,11 @@ def test_pgvector_extension_and_tables(db):
     tables = db.execute(
         text("SELECT tablename FROM pg_tables WHERE schemaname='public'")
     ).scalars().all()
-    for t in ("documents", "document_chunks", "document_embeddings", "chat_sessions", "chat_messages"):
+    for t in ("documents", "document_chunks", "document_embeddings", "chat_sessions", "chat_messages", "query_cache"):
         assert t in tables
-    # Alembic version stamped
+    # Alembic version stamped (head moves as migrations are added)
     rev = db.execute(text("SELECT version_num FROM alembic_version")).scalar()
-    assert rev == "0001"
+    assert rev == "0002"
     # vector type works end to end
     dist = db.execute(text("SELECT '[1,0,0]'::vector <=> '[0,1,0]'::vector")).scalar()
     assert abs(float(dist) - 1.0) < 1e-6

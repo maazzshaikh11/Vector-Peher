@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     top_k: int = 5
     similarity_threshold: float = 0.2
 
+    # Semantic cache: a cached answer is served when the cosine similarity
+    # between the new question embedding and a cached question embedding
+    # (same document scope) is >= this threshold.
+    cache_similarity_threshold: float = 0.85
+
     # CORS
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 

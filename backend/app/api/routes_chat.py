@@ -3,6 +3,8 @@
 SSE event sequence: {"type":"sources","sources":[...]} first (emitted right
 after retrieval, so the client can show citations even if the LLM is down),
 then {"type":"token","text":...}* then {"type":"done","session_id":...}.
+On a semantic-cache hit, a {"type":"cached","cached":true} event follows
+sources and the stored answer streams as tokens with no Groq call.
 If GROQ_API_KEY is missing, the stream carries the sources event followed by
 a single {"type":"error","message":"GROQ_API_KEY not configured..."} event
 with HTTP 200 (documented behaviour — the client reads the event stream).
@@ -27,6 +29,7 @@ from app.schemas.schemas import (
     ChatSessionSummary,
     ChatSessionUpdate,
 )
+from app.services.cache import check_cache, store_cache
 from app.services.embeddings.embeddings import embed_query
 from app.services.llm.groq_client import (
     GroqNotConfigured,
@@ -42,19 +45,28 @@ settings = get_settings()
 
 SYSTEM_PROMPT = (
     "You are Vector Brain, an accurate multi-document research assistant. "
-    "Answer questions using the information provided in the retrieved document context. "
+    "Answer questions using ONLY the information provided in the retrieved document context. "
     "Rules: Prioritize uploaded documents over general knowledge. "
     "Never invent facts, quotations, page numbers or document references. "
     "Use multiple documents when they contain relevant information. "
     "Clearly distinguish information from different documents. "
     "Cite the original filename and page number. "
-    "If the documents do not contain enough information, explicitly say so. "
     "Do not pretend to have read content that was not retrieved. "
-    "Keep answers relevant and well structured. "
-    "Use headings, lists and tables when appropriate. "
     "Preserve important technical terminology. "
-    "When sources disagree, explain the disagreement and cite both sources."
+    "When sources disagree, explain the disagreement and cite both sources. "
+    "If the documents do not contain enough information, respond exactly with: "
+    "\"I don't have enough information in the uploaded documents.\" "
+    "Formatting rules: Use clear section headings, with every heading on its own line. "
+    "Leave one blank line between sections. "
+    "Use bullet points whenever possible. "
+    "Never return one long paragraph. "
+    "Keep comparisons in a structured format, as a table or a list. "
+    "Start with a short intro line, then give the structured body. "
+    "Write the answer in Markdown so headings, lists and tables render."
 )
+
+# Exact fallback sentence, used verbatim when the context is insufficient.
+INSUFFICIENT_INFO = "I don't have enough information in the uploaded documents."
 
 
 def _sse(payload: dict) -> str:
@@ -110,6 +122,29 @@ def _cleanup_empty_session(session_id: uuid.UUID) -> None:
         pass
 
 
+def _persist_exchange(session_id: uuid.UUID, question: str, answer: str, sources: list[dict]) -> None:
+    """Persist a completed user+assistant exchange. Best-effort; never raises."""
+    try:
+        from app.database.session import SessionLocal
+
+        pdb = SessionLocal()
+        try:
+            pdb.add(ChatMessage(session_id=session_id, role="user", content=question))
+            pdb.add(
+                ChatMessage(
+                    session_id=session_id,
+                    role="assistant",
+                    content=answer,
+                    sources=sources,
+                )
+            )
+            pdb.commit()
+        finally:
+            pdb.close()
+    except Exception:
+        pass
+
+
 @router.post("/chat")
 async def chat(req: ChatRequest, db: Session = Depends(get_db)):
     auto_created = req.session_id is None
@@ -130,6 +165,11 @@ async def chat(req: ChatRequest, db: Session = Depends(get_db)):
         }
         for r in results
     ]
+
+    # Semantic cache: same scope + a sufficiently similar question means
+    # the stored answer can be served without calling Groq. Checked after
+    # retrieval (sources already computed) and before Groq.
+    cached = check_cache(db, qvec, req.document_ids)
 
     history = (
         db.query(ChatMessage)
@@ -163,6 +203,16 @@ async def chat(req: ChatRequest, db: Session = Depends(get_db)):
         # Sources first: the client can show citations even if the LLM
         # is unconfigured or fails mid-stream.
         yield _sse({"type": "sources", "sources": sources})
+        if cached is not None:
+            # Cache hit: same sources event, then a cached marker, then
+            # the stored answer streamed in ~200-char chunks — no Groq call.
+            yield _sse({"type": "cached", "cached": True})
+            cached_answer = cached["answer"]
+            for i in range(0, len(cached_answer), 200):
+                yield _sse({"type": "token", "text": cached_answer[i : i + 200]})
+            _persist_exchange(session_id, req.question, cached_answer, sources)
+            yield _sse({"type": "done", "session_id": str(session_id)})
+            return
         try:
             if not groq_configured():
                 yield _sse(
@@ -200,26 +250,24 @@ async def chat(req: ChatRequest, db: Session = Depends(get_db)):
                 _cleanup_empty_session(session_id)
             return
 
-        # Persist only completed exchanges.
-        try:
-            from app.database.session import SessionLocal
-
-            pdb = SessionLocal()
+        # Persist only completed exchanges, then cache the completed
+        # answer for semantically similar questions. Never store empty
+        # answers (an error/empty stream never reaches here with content).
+        if full_answer.strip():
+            _persist_exchange(session_id, req.question, full_answer, sources)
             try:
-                pdb.add(ChatMessage(session_id=session_id, role="user", content=req.question))
-                pdb.add(
-                    ChatMessage(
-                        session_id=session_id,
-                        role="assistant",
-                        content=full_answer,
-                        sources=sources,
+                from app.database.session import SessionLocal
+
+                cdb = SessionLocal()
+                try:
+                    store_cache(
+                        cdb, req.question, qvec, full_answer, sources,
+                        req.document_ids,
                     )
-                )
-                pdb.commit()
-            finally:
-                pdb.close()
-        except Exception:
-            pass
+                finally:
+                    cdb.close()
+            except Exception:
+                pass
         yield _sse({"type": "done", "session_id": str(session_id)})
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
